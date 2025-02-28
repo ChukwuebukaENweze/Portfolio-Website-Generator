@@ -1,0 +1,158 @@
+#This Python script generates a fully functional portfolio website. 
+# It fetches your latest GitHub projects, gets a random professional profile picture from Unsplash, 
+# includes a LinkedIn resume link, and applies custom Google Fonts for styling. 
+# uses open AI to add more detailed information, to build a better portflio
+# The script creates an `HTML` file (`portfolio.html`), which you can open in a browser or deploy online. 
+# Just replace the API keys, run the script, and your portfolio is ready! 
+
+import os
+import requests
+import random
+from jinja2 import Template
+
+# ================================
+# EMBEDDED API KEYS
+# ================================
+GITHUB_API_KEY = "your_github_api_key_here"  # Replace with your GitHub API key
+UNSPLASH_API_KEY = "your_unsplash_api_key_here"  # Replace with your Unsplash API key
+GOOGLE_FONTS_API_KEY = "your_google_fonts_api_key_here"  # Replace with your Google Fonts API key
+OPENAI_API_KEY = "your_openai_api_key_here"  # Replace with your OpenAI API key
+
+# ================================
+# USER INPUT
+# ================================
+USER_INFO = {
+    "name": input("Enter your full name: "),
+    "email": input("Enter your email address: "),
+    "phone": input("Enter your phone number: "),
+    "github_username": input("Enter your GitHub username: "),
+    "linkedin_url": input("Enter your LinkedIn URL: "),
+    "skills": input("Enter your top skills (comma-separated): "),
+    "bio": input("Enter a short bio about yourself: "),
+    "experience": input("Enter your work experience summary: "),
+    "education": input("Enter your educational background: ")
+}
+
+# ================================
+# FETCH DATA FROM APIs
+# ================================
+
+def fetch_github_repos(username, token):
+    if not username:
+        return []
+    url = f"https://api.github.com/users/{username}/repos"
+    headers = {"Authorization": f"token {token}"} if token else {}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        repos = response.json()
+        return [{"name": repo["name"], "description": repo["description"], "url": repo["html_url"]} for repo in repos[:5]]
+    return []
+
+def fetch_unsplash_image(api_key):
+    url = f"https://api.unsplash.com/photos/random?query=profile&client_id={api_key}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        return response.json().get("urls", {}).get("regular", "default_profile.jpg")
+    return "default_profile.jpg"
+
+def fetch_random_google_font(api_key):
+    url = f"https://www.googleapis.com/webfonts/v1/webfonts?key={api_key}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        fonts = response.json().get("items", [])
+        if fonts:
+            return random.choice(fonts)["family"].replace(" ", "+")
+    return "Arial"
+
+def enhance_bio_with_openai(api_key, user_info):
+    url = "https://api.openai.com/v1/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    prompt = f"""
+    Generate a professional bio for {user_info['name']}.
+    Include their skills ({user_info['skills']}), work experience ({user_info['experience']}),
+    and education ({user_info['education']}). Mention their professionalism and how they can be contacted.
+    """
+    data = {"model": "text-davinci-003", "prompt": prompt, "max_tokens": 200}
+    response = requests.post(url, headers=headers, json=data)
+    if response.status_code == 200:
+        return response.json().get("choices", [{}])[0].get("text", "A skilled professional.").strip()
+    return "A skilled professional."
+
+# Fetch data
+generated_bio = enhance_bio_with_openai(OPENAI_API_KEY, USER_INFO)
+projects = fetch_github_repos(USER_INFO["github_username"], GITHUB_API_KEY)
+profile_image = fetch_unsplash_image(UNSPLASH_API_KEY)
+selected_font = fetch_random_google_font(GOOGLE_FONTS_API_KEY)
+
+# ================================
+# TEMPLATE FOR HTML
+# ================================
+TEMPLATE_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{{ name }}'s Portfolio</title>
+    <link href="https://fonts.googleapis.com/css2?family={{ google_fonts }}:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: '{{ google_fonts }}', sans-serif; margin: 20px; text-align: center; }
+        .container { max-width: 800px; margin: auto; padding: 20px; }
+        .profile-img { width: 150px; height: 150px; border-radius: 50%; }
+        .project { border: 1px solid #ddd; padding: 10px; margin: 10px; border-radius: 10px; }
+        a { text-decoration: none; color: blue; }
+        .download { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="{{ profile_image }}" alt="Profile Picture" class="profile-img">
+        <h1>{{ name }}</h1>
+        <p>{{ bio }}</p>
+        <h3>My Skills</h3>
+        <p>{{ skills }}</p>
+        <h3>Work Experience</h3>
+        <p>{{ experience }}</p>
+        <h3>Education</h3>
+        <p>{{ education }}</p>
+        <h3>My Projects</h3>
+        {% for project in projects %}
+        <div class="project">
+            <h4>{{ project.name }}</h4>
+            <p>{{ project.description }}</p>
+            <a href="{{ project.url }}" target="_blank">View Project</a>
+        </div>
+        {% endfor %}
+        <h3>Resume</h3>
+        <p><a href="{{ linkedin_url }}" target="_blank">View My LinkedIn Profile</a></p>
+        <div class="download">
+            <a href="portfolio.html" download>Download Portfolio</a>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+# ================================
+# GENERATE PORTFOLIO HTML FILE
+# ================================
+
+def generate_portfolio():
+    template = Template(TEMPLATE_HTML)
+    rendered_html = template.render(
+        name=USER_INFO["name"],
+        bio=generated_bio,
+        skills=USER_INFO["skills"],
+        experience=USER_INFO["experience"],
+        education=USER_INFO["education"],
+        projects=projects,
+        profile_image=profile_image,
+        linkedin_url=USER_INFO["linkedin_url"],
+        google_fonts=selected_font
+    )
+    with open("portfolio.html", "w", encoding="utf-8") as f:
+        f.write(rendered_html)
+    print(f"✅ Portfolio website generated: portfolio.html (Font: {selected_font.replace('+', ' ')})")
+    print("📂 Click the link to download: portfolio.html")
+
+if __name__ == "__main__":
+    generate_portfolio()
